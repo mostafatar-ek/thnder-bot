@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+bot.log
+start_bot.bat
+.env.example
