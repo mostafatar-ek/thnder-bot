@@ -4,22 +4,69 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _env(key: str, default: str = "") -> str:
+    return os.environ.get(key, default)
+
+
 class Config:
     # Email
-    EMAIL_SENDER = os.getenv("EMAIL_SENDER", "")
-    EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
-    EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER", "")
-    SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    @staticmethod
+    def _get(key: str, default: str = "") -> str:
+        return os.environ.get(key, default)
+
+    @property
+    def EMAIL_SENDER(self):
+        return _env("EMAIL_SENDER")
+
+    @property
+    def EMAIL_PASSWORD(self):
+        return _env("EMAIL_PASSWORD")
+
+    @property
+    def EMAIL_RECEIVER(self):
+        return _env("EMAIL_RECEIVER")
+
+    @property
+    def SMTP_SERVER(self):
+        return _env("SMTP_SERVER", "smtp.gmail.com")
+
+    @property
+    def SMTP_PORT(self):
+        return int(_env("SMTP_PORT", "587"))
 
     # Bot
-    SCAN_INTERVAL_MINUTES = int(os.getenv("SCAN_INTERVAL_MINUTES", "30"))
+    @property
+    def SCAN_INTERVAL_MINUTES(self):
+        return int(_env("SCAN_INTERVAL_MINUTES", "30"))
 
     # Deal criteria
-    MIN_DEAL_SCORE = float(os.getenv("MIN_DEAL_SCORE", "75"))
-    RSI_OVERSOLD = float(os.getenv("RSI_OVERSOLD", "30"))
-    RSI_OVERBOUGHT = float(os.getenv("RSI_OVERBOUGHT", "70"))
-    VOLUME_SPIKE_MULTIPLIER = float(os.getenv("VOLUME_SPIKE_MULTIPLIER", "1.5"))
-    PRICE_DIP_PERCENT = float(os.getenv("PRICE_DIP_PERCENT", "5.0"))
-    SHORT_MA_PERIOD = int(os.getenv("SHORT_MA_PERIOD", "10"))
-    LONG_MA_PERIOD = int(os.getenv("LONG_MA_PERIOD", "50"))
+    @property
+    def MIN_DEAL_SCORE(self):
+        return float(_env("MIN_DEAL_SCORE", "75"))
+
+    @property
+    def RSI_OVERSOLD(self):
+        return float(_env("RSI_OVERSOLD", "30"))
+
+    @property
+    def RSI_OVERBOUGHT(self):
+        return float(_env("RSI_OVERBOUGHT", "70"))
+
+    @property
+    def VOLUME_SPIKE_MULTIPLIER(self):
+        return float(_env("VOLUME_SPIKE_MULTIPLIER", "1.5"))
+
+    @property
+    def PRICE_DIP_PERCENT(self):
+        return float(_env("PRICE_DIP_PERCENT", "5.0"))
+
+    @property
+    def SHORT_MA_PERIOD(self):
+        return int(_env("SHORT_MA_PERIOD", "10"))
+
+    @property
+    def LONG_MA_PERIOD(self):
+        return int(_env("LONG_MA_PERIOD", "50"))
+
+
+Config = Config()
