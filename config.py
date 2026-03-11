@@ -9,30 +9,14 @@ def _env(key: str, default: str = "") -> str:
 
 
 class Config:
-    # Email
-    @staticmethod
-    def _get(key: str, default: str = "") -> str:
-        return os.environ.get(key, default)
+    # Telegram
+    @property
+    def TELEGRAM_BOT_TOKEN(self):
+        return _env("TELEGRAM_BOT_TOKEN")
 
     @property
-    def EMAIL_SENDER(self):
-        return _env("EMAIL_SENDER")
-
-    @property
-    def EMAIL_PASSWORD(self):
-        return _env("EMAIL_PASSWORD")
-
-    @property
-    def EMAIL_RECEIVER(self):
-        return _env("EMAIL_RECEIVER")
-
-    @property
-    def SMTP_SERVER(self):
-        return _env("SMTP_SERVER", "smtp.gmail.com")
-
-    @property
-    def SMTP_PORT(self):
-        return int(_env("SMTP_PORT", "465"))
+    def TELEGRAM_CHAT_ID(self):
+        return _env("TELEGRAM_CHAT_ID")
 
     # Bot
     @property

@@ -2,12 +2,12 @@
 Thndr EGX Deal-Finder Bot
 ==========================
 Continuously scans Egyptian Exchange stocks, scores them using technical
-analysis, and sends you an email when a great deal is found.
+analysis, and sends you a Telegram alert when a great deal is found.
 
 Usage:
     python bot.py              # Run one scan
     python bot.py --loop       # Run continuously on a schedule
-    python bot.py --test-email # Send a test email to verify config
+    python bot.py --test        # Send a test notification to verify config
 """
 
 import argparse
@@ -94,9 +94,9 @@ def run_loop():
             time.sleep(60)
 
 
-def send_test_email():
-    """Send a test email to verify configuration."""
-    logger.info("Sending test email...")
+def send_test_notification():
+    """Send a test Telegram notification to verify configuration."""
+    logger.info("Sending test notification...")
     test_deal = DealResult(
         ticker="TEST.CA",
         score=90.0,
@@ -105,19 +105,19 @@ def send_test_email():
     )
     success = send_deal_alert([test_deal])
     if success:
-        logger.info("Test email sent successfully! Check your inbox.")
+        logger.info("Test notification sent! Check Telegram.")
     else:
-        logger.error("Test email failed. Check your .env config.")
+        logger.error("Test notification failed. Check your TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Thndr EGX Deal-Finder Bot")
     parser.add_argument("--loop", action="store_true", help="Run continuously on a schedule")
-    parser.add_argument("--test-email", action="store_true", help="Send a test email")
+    parser.add_argument("--test", action="store_true", help="Send a test Telegram notification")
     args = parser.parse_args()
 
-    if args.test_email:
-        send_test_email()
+    if args.test:
+        send_test_notification()
     elif args.loop:
         run_loop()
     else:
