@@ -52,5 +52,14 @@ class Config:
     def LONG_MA_PERIOD(self):
         return int(_env("LONG_MA_PERIOD", "50"))
 
+    # Sell thresholds
+    @property
+    def TAKE_PROFIT_PERCENT(self):
+        return float(_env("TAKE_PROFIT_PERCENT", "15.0"))
+
+    @property
+    def STOP_LOSS_PERCENT(self):
+        return float(_env("STOP_LOSS_PERCENT", "7.0"))
+
 
 Config = Config()

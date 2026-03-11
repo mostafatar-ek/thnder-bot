@@ -230,7 +230,7 @@ def analyze_bollinger(df: pd.DataFrame) -> DealSignal:
 
 def analyze_stock(ticker: str, df: pd.DataFrame) -> DealResult:
     """Run all analyses on a stock and compute a composite deal score."""
-    result = DealResult(ticker=ticker, current_price=df["Close"].iloc[-1])
+    result = DealResult(ticker=ticker, current_price=round(df["Close"].iloc[-1], 2))
 
     analyzers = [
         analyze_rsi,
@@ -287,3 +287,130 @@ def screen_all_stocks(stock_data: dict[str, pd.DataFrame]) -> list[DealResult]:
 
     results.sort(key=lambda r: r.score, reverse=True)
     return results
+
+
+# ──────────────────────── Sell signal analysis ────────────────────────
+
+@dataclass
+class SellSignal:
+    """Individual sell signal."""
+    name: str
+    detail: str
+    urgency: str  # "HIGH", "MEDIUM", "LOW"
+
+
+@dataclass
+class SellResult:
+    """Sell analysis for one held stock."""
+    ticker: str
+    current_price: float
+    buy_price: float
+    pnl_percent: float
+    signals: list[SellSignal] = field(default_factory=list)
+    recommendation: str = ""
+
+    @property
+    def should_sell(self) -> bool:
+        return any(s.urgency == "HIGH" for s in self.signals) or len(self.signals) >= 3
+
+
+def check_sell_signals(
+    ticker: str, df: pd.DataFrame, buy_price: float
+) -> SellResult:
+    """Check whether a held stock should be sold."""
+    current_price = round(df["Close"].iloc[-1], 2)
+    pnl_percent = round(((current_price - buy_price) / buy_price) * 100, 2)
+
+    result = SellResult(
+        ticker=ticker,
+        current_price=current_price,
+        buy_price=buy_price,
+        pnl_percent=pnl_percent,
+    )
+
+    # 1) Take-profit check
+    if pnl_percent >= Config.TAKE_PROFIT_PERCENT:
+        result.signals.append(SellSignal(
+            "Take Profit",
+            f"Profit is +{pnl_percent:.1f}% (target: {Config.TAKE_PROFIT_PERCENT}%) — consider taking profit",
+            "HIGH",
+        ))
+
+    # 2) Stop-loss check
+    if pnl_percent <= -Config.STOP_LOSS_PERCENT:
+        result.signals.append(SellSignal(
+            "Stop Loss",
+            f"Loss is {pnl_percent:.1f}% (limit: -{Config.STOP_LOSS_PERCENT}%) — cut losses",
+            "HIGH",
+        ))
+
+    # 3) RSI overbought
+    rsi = compute_rsi(df["Close"])
+    current_rsi = rsi.iloc[-1]
+    if not np.isnan(current_rsi) and current_rsi >= Config.RSI_OVERBOUGHT:
+        result.signals.append(SellSignal(
+            "RSI Overbought",
+            f"RSI={current_rsi:.1f} (above {Config.RSI_OVERBOUGHT}) — stock is overbought",
+            "MEDIUM",
+        ))
+
+    # 4) Death cross (short MA crosses below long MA)
+    short_ma = df["Close"].rolling(window=Config.SHORT_MA_PERIOD).mean()
+    long_ma = df["Close"].rolling(window=Config.LONG_MA_PERIOD).mean()
+    if not np.isnan(short_ma.iloc[-1]) and not np.isnan(long_ma.iloc[-1]):
+        crossed_below = (short_ma.iloc[-1] < long_ma.iloc[-1]) and (
+            short_ma.iloc[-2] >= long_ma.iloc[-2]
+        )
+        if crossed_below:
+            result.signals.append(SellSignal(
+                "Death Cross",
+                f"{Config.SHORT_MA_PERIOD}-day MA just crossed BELOW {Config.LONG_MA_PERIOD}-day MA",
+                "HIGH",
+            ))
+        elif short_ma.iloc[-1] < long_ma.iloc[-1]:
+            result.signals.append(SellSignal(
+                "Bearish Trend",
+                f"Short MA below long MA — downtrend",
+                "LOW",
+            ))
+
+    # 5) MACD bearish crossover
+    macd_line, signal_line = compute_macd(df["Close"])
+    if not np.isnan(macd_line.iloc[-1]) and not np.isnan(signal_line.iloc[-1]):
+        crossed_below = (macd_line.iloc[-1] < signal_line.iloc[-1]) and (
+            macd_line.iloc[-2] >= signal_line.iloc[-2]
+        )
+        if crossed_below:
+            result.signals.append(SellSignal(
+                "MACD Bearish",
+                "MACD just crossed below signal line — bearish momentum",
+                "MEDIUM",
+            ))
+
+    # 6) Upper Bollinger Band touch
+    upper, middle, lower = compute_bollinger_bands(df["Close"])
+    if not np.isnan(upper.iloc[-1]) and current_price >= upper.iloc[-1]:
+        result.signals.append(SellSignal(
+            "Bollinger Upper",
+            "Price at/above upper Bollinger Band — may be overextended",
+            "MEDIUM",
+        ))
+
+    # Generate recommendation
+    high_count = sum(1 for s in result.signals if s.urgency == "HIGH")
+    total = len(result.signals)
+
+    if high_count >= 2:
+        result.recommendation = "SELL NOW"
+    elif high_count == 1:
+        result.recommendation = "STRONG SELL"
+    elif total >= 3:
+        result.recommendation = "SELL"
+    elif total >= 2:
+        result.recommendation = "CONSIDER SELLING"
+    elif total == 1:
+        result.recommendation = "WATCH CLOSELY"
+    else:
+        result.recommendation = "HOLD"
+
+    return result

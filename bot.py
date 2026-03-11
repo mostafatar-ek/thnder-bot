@@ -16,10 +16,11 @@ import sys
 import time
 from datetime import datetime
 
-from analyzer import DealResult, screen_all_stocks
+from analyzer import DealResult, check_sell_signals, screen_all_stocks
 from config import Config
-from notifier import send_deal_alert
-from stock_data import EGX_TICKERS, fetch_all_stocks
+from notifier import send_deal_alert, send_sell_alert
+from portfolio import add_holding, list_holdings, load_portfolio, remove_holding
+from stock_data import EGX_TICKERS, fetch_all_stocks, fetch_stock_data
 
 # ── Logging setup ──
 logging.basicConfig(
@@ -65,10 +66,39 @@ def run_scan() -> list[DealResult]:
     logger.info("-" * 60)
 
     if deals:
-        logger.info(f"🔔 {len(deals)} deal(s) found! Sending email alert...")
+        logger.info(f"🔔 {len(deals)} deal(s) found! Sending alert...")
         send_deal_alert(deals)
     else:
         logger.info("No deals scoring above threshold this scan.")
+
+    # 5. Check sell signals for portfolio holdings
+    holdings = load_portfolio()
+    if holdings:
+        logger.info(f"Checking sell signals for {len(holdings)} holding(s)...")
+        sell_alerts = []
+        for holding in holdings:
+            df = fetch_stock_data(holding.ticker, period="3mo")
+            if df is None or len(df) < Config.LONG_MA_PERIOD:
+                logger.warning(f"Skipping sell check for {holding.ticker}: insufficient data")
+                continue
+            sell_result = check_sell_signals(holding.ticker, df, holding.buy_price)
+            if sell_result.should_sell:
+                sell_alerts.append(sell_result)
+                logger.info(
+                    f"⚠️ SELL signal for {holding.ticker}: {sell_result.recommendation} "
+                    f"(P&L: {sell_result.pnl_percent:+.1f}%)"
+                )
+            else:
+                logger.info(
+                    f"✅ {holding.ticker}: {sell_result.recommendation} "
+                    f"(P&L: {sell_result.pnl_percent:+.1f}%)"
+                )
+
+        if sell_alerts:
+            logger.info(f"🔴 {len(sell_alerts)} sell alert(s)! Sending notification...")
+            send_sell_alert(sell_alerts)
+    else:
+        logger.info("No holdings in portfolio — skipping sell check.")
 
     return deals
 
@@ -114,10 +144,32 @@ def main():
     parser = argparse.ArgumentParser(description="Thndr EGX Deal-Finder Bot")
     parser.add_argument("--loop", action="store_true", help="Run continuously on a schedule")
     parser.add_argument("--test", action="store_true", help="Send a test Telegram notification")
+    parser.add_argument("--add", nargs=2, metavar=("TICKER", "PRICE"),
+                        help="Add a stock to portfolio: --add COMI 125.50")
+    parser.add_argument("--remove", metavar="TICKER", help="Remove a stock from portfolio")
+    parser.add_argument("--portfolio", action="store_true", help="Show current portfolio")
     args = parser.parse_args()
 
     if args.test:
         send_test_notification()
+    elif args.add:
+        ticker, price = args.add
+        h = add_holding(ticker, float(price))
+        print(f"Added {h.ticker} @ {h.buy_price} EGP")
+    elif args.remove:
+        if remove_holding(args.remove):
+            print(f"Removed {args.remove.upper()} from portfolio")
+        else:
+            print(f"{args.remove.upper()} not found in portfolio")
+    elif args.portfolio:
+        holdings = list_holdings()
+        if not holdings:
+            print("Portfolio is empty. Add stocks with: python bot.py --add TICKER PRICE")
+        else:
+            print(f"\n{'Ticker':<12} {'Buy Price':>10} {'Date':>12} {'Shares':>8}")
+            print("-" * 44)
+            for h in holdings:
+                print(f"{h.ticker:<12} {h.buy_price:>10.2f} {h.buy_date:>12} {h.shares:>8.1f}")
     elif args.loop:
         run_loop()
     else:
