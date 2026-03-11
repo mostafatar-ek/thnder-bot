@@ -74,14 +74,22 @@ def send_deal_alert(deals: list[DealResult]) -> bool:
         logger.info("No deals to report — skipping email.")
         return False
 
-    if not Config.EMAIL_SENDER or not Config.EMAIL_PASSWORD:
-        logger.error("Email credentials not configured in .env file!")
+    sender = Config.EMAIL_SENDER
+    password = Config.EMAIL_PASSWORD
+    receiver = Config.EMAIL_RECEIVER
+    smtp_server = Config.SMTP_SERVER
+    smtp_port = Config.SMTP_PORT
+
+    logger.info(f"Email config: sender={sender}, receiver={receiver}, server={smtp_server}:{smtp_port}")
+
+    if not sender or not password:
+        logger.error(f"Email credentials missing! sender='{sender}', password={'SET' if password else 'EMPTY'}")
         return False
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"🔔 Thndr Bot — {len(deals)} Deal(s) Found! ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
-    msg["From"] = Config.EMAIL_SENDER
-    msg["To"] = Config.EMAIL_RECEIVER
+    msg["Subject"] = f"Thndr Bot - {len(deals)} Deal(s) Found! ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    msg["From"] = sender
+    msg["To"] = receiver
 
     # Plain text fallback
     plain = "Thndr Deal Alert\n\n"
@@ -98,12 +106,15 @@ def send_deal_alert(deals: list[DealResult]) -> bool:
     msg.attach(MIMEText(html, "html"))
 
     try:
-        with smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT) as server:
+        logger.info(f"Connecting to {smtp_server}:{smtp_port}...")
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
             server.starttls()
-            server.login(Config.EMAIL_SENDER, Config.EMAIL_PASSWORD)
-            server.sendmail(Config.EMAIL_SENDER, Config.EMAIL_RECEIVER, msg.as_string())
-        logger.info(f"✅ Deal alert email sent to {Config.EMAIL_RECEIVER}")
+            logger.info("STARTTLS OK, logging in...")
+            server.login(sender, password)
+            logger.info("Login OK, sending email...")
+            server.sendmail(sender, receiver, msg.as_string())
+        logger.info(f"Deal alert email sent to {receiver}")
         return True
     except Exception as e:
-        logger.error(f"Failed to send email: {e}")
+        logger.error(f"Failed to send email: {e}", exc_info=True)
         return False
