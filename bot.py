@@ -21,6 +21,7 @@ from config import Config
 from notifier import send_deal_alert, send_sell_alert
 from portfolio import add_holding, list_holdings, load_portfolio, remove_holding
 from stock_data import EGX_TICKERS, fetch_all_stocks, fetch_stock_data
+from telegram_commands import is_scan_requested, process_updates
 
 # ── Logging setup ──
 logging.basicConfig(
@@ -104,22 +105,35 @@ def run_scan() -> list[DealResult]:
 
 
 def run_loop():
-    """Run scans on a schedule repeatedly."""
+    """Run scans on a schedule, checking Telegram commands between scans."""
     interval = Config.SCAN_INTERVAL_MINUTES * 60
     logger.info(f"Bot running in loop mode — scanning every {Config.SCAN_INTERVAL_MINUTES} minutes")
+    logger.info("Listening for Telegram commands (/buy, /sell, /portfolio, /scan)")
     logger.info("Press Ctrl+C to stop.\n")
+
+    next_scan_time = 0  # Run first scan immediately
 
     while True:
         try:
-            run_scan()
-            next_scan = datetime.now().strftime("%H:%M:%S")
-            logger.info(f"Next scan in {Config.SCAN_INTERVAL_MINUTES} min (sleeping since {next_scan})...\n")
-            time.sleep(interval)
+            # Check for Telegram commands
+            process_updates()
+
+            # Run scan if it's time or user requested one
+            now = time.time()
+            if now >= next_scan_time or is_scan_requested():
+                run_scan()
+                next_scan_time = time.time() + interval
+                next_str = datetime.now().strftime("%H:%M:%S")
+                logger.info(f"Next scan in {Config.SCAN_INTERVAL_MINUTES} min (since {next_str})...\n")
+
+            # Short sleep so we check Telegram frequently
+            time.sleep(2)
+
         except KeyboardInterrupt:
             logger.info("Bot stopped by user.")
             break
         except Exception as e:
-            logger.error(f"Error during scan: {e}", exc_info=True)
+            logger.error(f"Error during loop: {e}", exc_info=True)
             logger.info("Retrying in 60 seconds...")
             time.sleep(60)
 
