@@ -1,6 +1,6 @@
 # 📈 Thndr EGX Deal-Finder Bot
 
-A Python bot that scans the **Egyptian Exchange (EGX)** for the best stock deals using technical analysis and sends you **instant Telegram alerts** when it finds a great opportunity.
+A Python bot that scans the **Egyptian Exchange (EGX)** for the best stock deals using technical analysis and sends you **instant Telegram alerts** when it finds a great opportunity — and tells you when to **sell** too.
 
 Built for use with the **Thndr** trading app.
 
@@ -10,7 +10,26 @@ Built for use with the **Thndr** trading app.
 
 The bot runs 24/7 on Railway (cloud), scans 20 EGX stocks every 30 minutes, and scores each stock from 0–100 based on 6 technical indicators.
 
-When a stock scores **75+**, you get a Telegram notification on your phone.
+- When a stock scores **75+**, you get a 📈 **BUY alert** on Telegram
+- When a stock you own triggers sell signals, you get a 🔴 **SELL alert** on Telegram
+- Manage your portfolio directly from Telegram — no terminal needed
+
+---
+
+## 📱 Telegram Commands
+
+Control the bot from your phone:
+
+| Command | What It Does | Example |
+|---|---|---|
+| `/buy TICKER PRICE` | Tell the bot you bought a stock | `/buy ETEL 84.80` |
+| `/buy TICKER PRICE SHARES` | Same, with number of shares | `/buy FWRY 17.90 10` |
+| `/sell TICKER` | Tell the bot you sold a stock | `/sell ETEL` |
+| `/portfolio` | View all your current holdings | `/portfolio` |
+| `/scan` | Trigger an immediate market scan | `/scan` |
+| `/help` | Show all available commands | `/help` |
+
+The bot responds instantly to your commands — just chat with it like a person.
 
 ---
 
@@ -56,22 +75,29 @@ When 3+ of these fire together, it's the strongest signal.
 
 ## 🔴 When to SELL
 
-The bot focuses on **buy signals**, but here's when you should consider selling:
+The bot **automatically monitors your portfolio** and sends you a 🔴 SELL alert when it detects sell signals. Just add your stocks with `/buy TICKER PRICE` and the bot handles the rest.
 
-### Take Profit (Good Exit)
-| Condition | Action |
-|---|---|
-| Stock is up **10–15%** from your buy price | Consider taking profit on half your position |
-| Stock is up **20%+** from your buy price | Strongly consider selling — lock in gains |
-| RSI goes above **70** (overbought) | The stock is getting expensive — time to sell |
-| Price touches **upper Bollinger Band** | Overbought — likely to pull back |
+### Sell Signals Monitored
 
-### Stop Loss (Cut Losses)
-| Condition | Action |
+| Signal | Trigger | Urgency |
+|---|---|---|
+| **Take Profit** | Price rises ≥15% from your buy price | 🚨 HIGH |
+| **Stop Loss** | Price drops ≥7% from your buy price | 🚨 HIGH |
+| **RSI Overbought** | RSI goes above 70 | ⚠️ MEDIUM |
+| **Death Cross** | 10-day MA crosses below 50-day MA | 🚨 HIGH |
+| **MACD Bearish** | MACD crosses below signal line | ⚠️ MEDIUM |
+| **Bollinger Upper** | Price hits upper Bollinger Band | ⚠️ MEDIUM |
+
+### Sell Recommendations
+
+| Level | Meaning |
 |---|---|
-| Stock drops **5–7%** below your buy price | **Sell immediately** — cut your losses |
-| Stock drops **10%** below your buy price | **Absolute maximum loss** — exit now |
-| Bad company news (scandal, lost contract, etc.) | Sell regardless of price — fundamentals changed |
+| 🚨 **SELL NOW** | 2+ high-urgency signals — exit immediately |
+| 🚨 **STRONG SELL** | 1 high-urgency signal (e.g. stop loss hit) |
+| 🔴 **SELL** | 3+ signals of any urgency firing together |
+| ⚠️ **CONSIDER SELLING** | 2 signals — be cautious |
+| 👀 **WATCH CLOSELY** | 1 minor signal — keep an eye on it |
+| ✅ **HOLD** | No sell signals — keep holding |
 
 ### General Sell Rules
 - **Never hold a losing position hoping it will recover** — if it drops 7%, get out
@@ -149,8 +175,11 @@ MIN_DEAL_SCORE=75
 ```bash
 pip install -r requirements.txt
 python bot.py              # Run one scan
-python bot.py --loop       # Run continuously
+python bot.py --loop       # Run continuously (with Telegram commands)
 python bot.py --test       # Send test Telegram notification
+python bot.py --portfolio  # View portfolio
+python bot.py --add ETEL 84.80    # Add stock to portfolio
+python bot.py --remove ETEL       # Remove stock from portfolio
 ```
 
 ---
@@ -170,8 +199,10 @@ This bot provides **automated technical analysis only — not financial advice**
 
 ```
 BUY  → Bot alerts you (score ≥ 75) + your quick research looks good
+       → Tell the bot: /buy TICKER PRICE
 HOLD → Keep if still trending up and score stays above 50
-SELL → Stock up 15-20% (take profit) OR down 7% (stop loss) OR RSI > 70
+SELL → Bot alerts you when sell signals fire
+       → When done, tell the bot: /sell TICKER
 ```
 
 **Golden Rule: Cut losers fast, let winners run (but not forever).**
