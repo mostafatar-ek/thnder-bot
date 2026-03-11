@@ -32,7 +32,7 @@ class Config:
 
     @property
     def SMTP_PORT(self):
-        return int(_env("SMTP_PORT", "587"))
+        return int(_env("SMTP_PORT", "465"))
 
     # Bot
     @property

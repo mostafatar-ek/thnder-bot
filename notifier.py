@@ -4,6 +4,7 @@ Email notification system — sends deal alerts via SMTP.
 
 import logging
 import smtplib
+import socket
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -106,13 +107,27 @@ def send_deal_alert(deals: list[DealResult]) -> bool:
     msg.attach(MIMEText(html, "html"))
 
     try:
-        logger.info(f"Connecting to {smtp_server}:{smtp_port}...")
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
-            server.starttls()
-            logger.info("STARTTLS OK, logging in...")
-            server.login(sender, password)
-            logger.info("Login OK, sending email...")
-            server.sendmail(sender, receiver, msg.as_string())
+        # Force IPv4 resolution to avoid "Network is unreachable" on cloud platforms
+        addr_info = socket.getaddrinfo(smtp_server, smtp_port, socket.AF_INET)
+        ipv4_addr = addr_info[0][4][0]
+        logger.info(f"Resolved {smtp_server} -> {ipv4_addr}")
+
+        # Use SSL on port 465 (more reliable on cloud), fallback to STARTTLS on 587
+        if smtp_port == 465:
+            logger.info(f"Connecting via SMTP_SSL to {ipv4_addr}:{smtp_port}...")
+            with smtplib.SMTP_SSL(ipv4_addr, smtp_port, timeout=30) as server:
+                logger.info("SSL connected, logging in...")
+                server.login(sender, password)
+                logger.info("Login OK, sending email...")
+                server.sendmail(sender, receiver, msg.as_string())
+        else:
+            logger.info(f"Connecting via STARTTLS to {ipv4_addr}:{smtp_port}...")
+            with smtplib.SMTP(ipv4_addr, smtp_port, timeout=30) as server:
+                server.starttls()
+                logger.info("STARTTLS OK, logging in...")
+                server.login(sender, password)
+                logger.info("Login OK, sending email...")
+                server.sendmail(sender, receiver, msg.as_string())
         logger.info(f"Deal alert email sent to {receiver}")
         return True
     except Exception as e:
