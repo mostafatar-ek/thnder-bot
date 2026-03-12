@@ -16,6 +16,8 @@ import sys
 import time
 from datetime import datetime
 
+import pytz
+
 from analyzer import DealResult, check_sell_signals, screen_all_stocks
 from config import Config
 from notifier import send_deal_alert, send_sell_alert
@@ -34,6 +36,30 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
+
+# EGX trading hours (Egypt timezone = Africa/Cairo)
+EGYPT_TZ = pytz.timezone("Africa/Cairo")
+EGX_OPEN_HOUR = 10    # 10:00 AM
+EGX_CLOSE_HOUR = 14   # 2:00 PM (market closes ~2:30, we scan until 3 PM for closing prices)
+EGX_CLOSE_MINUTE = 59
+EGX_TRADING_DAYS = (6, 0, 1, 2, 3)  # Sunday=6, Monday=0, Tuesday=1, Wednesday=2, Thursday=3
+
+
+def is_market_hours() -> bool:
+    """Check if we're within EGX trading hours (Sun-Thu, 10AM-3PM Cairo time)."""
+    now = datetime.now(EGYPT_TZ)
+    weekday = now.weekday()  # Monday=0, Sunday=6
+    hour = now.hour
+    minute = now.minute
+
+    if weekday not in EGX_TRADING_DAYS:
+        return False
+
+    # 10:00 AM to 2:59 PM
+    if hour < EGX_OPEN_HOUR or (hour > EGX_CLOSE_HOUR or (hour == EGX_CLOSE_HOUR and minute > EGX_CLOSE_MINUTE)):
+        return False
+
+    return True
 
 
 def run_scan() -> list[DealResult]:
@@ -108,23 +134,41 @@ def run_loop():
     """Run scans on a schedule, checking Telegram commands between scans."""
     interval = Config.SCAN_INTERVAL_MINUTES * 60
     logger.info(f"Bot running in loop mode — scanning every {Config.SCAN_INTERVAL_MINUTES} minutes")
+    logger.info("Active hours: Sun-Thu 10:00 AM – 3:00 PM (Cairo time)")
     logger.info("Listening for Telegram commands (/buy, /sell, /portfolio, /scan)")
     logger.info("Press Ctrl+C to stop.\n")
 
     next_scan_time = 0  # Run first scan immediately
+    was_sleeping = False
 
     while True:
         try:
-            # Check for Telegram commands
+            # Always check for Telegram commands (even outside market hours)
             process_updates()
 
-            # Run scan if it's time or user requested one
             now = time.time()
-            if now >= next_scan_time or is_scan_requested():
+            scan_requested = is_scan_requested()
+
+            # Check market hours
+            if not is_market_hours() and not scan_requested:
+                if not was_sleeping:
+                    cairo_now = datetime.now(EGYPT_TZ).strftime("%H:%M %A")
+                    logger.info(f"💤 Market closed ({cairo_now} Cairo). Sleeping until next session...")
+                    was_sleeping = True
+                time.sleep(10)  # Check Telegram every 10s while sleeping
+                continue
+
+            if was_sleeping:
+                logger.info("☀️ Market hours — resuming scans!")
+                was_sleeping = False
+                next_scan_time = 0  # Scan immediately on market open
+
+            # Run scan if it's time or user requested one
+            if now >= next_scan_time or scan_requested:
                 run_scan()
                 next_scan_time = time.time() + interval
-                next_str = datetime.now().strftime("%H:%M:%S")
-                logger.info(f"Next scan in {Config.SCAN_INTERVAL_MINUTES} min (since {next_str})...\n")
+                next_str = datetime.now(EGYPT_TZ).strftime("%H:%M:%S")
+                logger.info(f"Next scan in {Config.SCAN_INTERVAL_MINUTES} min (since {next_str} Cairo)...\n")
 
             # Short sleep so we check Telegram frequently
             time.sleep(2)
