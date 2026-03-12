@@ -137,6 +137,35 @@ def send_deal_alert(deals: list[DealResult]) -> bool:
     return _send_telegram(message)
 
 
+def send_scan_summary(results: list[DealResult]) -> bool:
+    """Send a full scan summary (used by /scan command)."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    deals = [r for r in results if r.score >= Config.MIN_DEAL_SCORE]
+
+    lines = [
+        f"🔍 *Scan Results*",
+        f"🕐 {now}",
+        f"Scanned *{len(results)}* stocks\n",
+    ]
+
+    if deals:
+        lines.append(f"🔔 *{len(deals)} deal(s)* above {Config.MIN_DEAL_SCORE}:\n")
+        for d in deals:
+            lines.append(f"⭐ *{d.ticker}* — {d.score:.0f}/100 — {d.current_price:.2f} EGP")
+        lines.append("")
+
+    lines.append("📊 *Top 10 stocks:*")
+    for r in results[:10]:
+        icon = "⭐" if r.score >= Config.MIN_DEAL_SCORE else "•"
+        lines.append(f"{icon} {r.ticker}: {r.score:.0f}/100 — {r.current_price:.2f} EGP")
+
+    if not deals:
+        lines.append(f"\n_No deals above {Config.MIN_DEAL_SCORE} right now._")
+
+    lines.append("\n📌 _Prices are closing prices (may differ from live)._")
+    return _send_telegram("\n".join(lines))
+
+
 def send_sell_alert(sell_results: list[SellResult]) -> bool:
     """Send a Telegram alert with sell signals for held stocks."""
     if not sell_results:

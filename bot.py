@@ -20,7 +20,7 @@ import pytz
 
 from analyzer import DealResult, check_sell_signals, screen_all_stocks
 from config import Config
-from notifier import send_deal_alert, send_sell_alert
+from notifier import send_deal_alert, send_scan_summary, send_sell_alert
 from portfolio import add_holding, list_holdings, load_portfolio, remove_holding
 from stock_data import EGX_TICKERS, fetch_all_stocks, fetch_stock_data
 from telegram_commands import is_scan_requested, process_updates
@@ -62,8 +62,8 @@ def is_market_hours() -> bool:
     return True
 
 
-def run_scan() -> list[DealResult]:
-    """Execute one full scan cycle."""
+def run_scan(forced: bool = False) -> list[DealResult]:
+    """Execute one full scan cycle. If forced=True (from /scan), always send results."""
     logger.info("=" * 60)
     logger.info("Starting EGX scan...")
     logger.info(f"Watching {len(EGX_TICKERS)} stocks | Min score: {Config.MIN_DEAL_SCORE}")
@@ -92,7 +92,11 @@ def run_scan() -> list[DealResult]:
         )
     logger.info("-" * 60)
 
-    if deals:
+    if forced:
+        # /scan command: always send full summary
+        logger.info("Sending scan summary (forced by /scan)...")
+        send_scan_summary(results)
+    elif deals:
         logger.info(f"🔔 {len(deals)} deal(s) found! Sending alert...")
         send_deal_alert(deals)
     else:
@@ -165,7 +169,7 @@ def run_loop():
 
             # Run scan if it's time or user requested one
             if now >= next_scan_time or scan_requested:
-                run_scan()
+                run_scan(forced=scan_requested)
                 next_scan_time = time.time() + interval
                 next_str = datetime.now(EGYPT_TZ).strftime("%H:%M:%S")
                 logger.info(f"Next scan in {Config.SCAN_INTERVAL_MINUTES} min (since {next_str} Cairo)...\n")
