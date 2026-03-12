@@ -4,16 +4,26 @@ Telegram command handler — lets the user manage portfolio via chat commands.
 Supported commands:
     /buy TICKER PRICE    — Add a stock to portfolio (e.g. /buy ETEL 84.80)
     /sell TICKER         — Remove a stock from portfolio (e.g. /sell ETEL)
-    /portfolio           — Show all current holdings
+    /portfolio           — Show all current holdings with live P&L
+    /alert TICKER PRICE  — Set a price alert (e.g. /alert COMI 130)
+    /alerts              — View active price alerts
     /scan                — Trigger an immediate market scan
+    /status              — Show bot status and market info
     /help                — Show available commands
 """
 
 import logging
+import time
+from datetime import datetime
+
 import requests
 
 from config import Config
-from portfolio import add_holding, list_holdings, remove_holding
+from portfolio import (
+    add_alert, add_holding, list_holdings, load_alerts,
+    remove_alerts, remove_holding,
+)
+from stock_data import fetch_egx30, get_current_price
 
 logger = logging.getLogger(__name__)
 
@@ -103,23 +113,44 @@ def _handle_sell(chat_id: str, args: list[str]) -> None:
 
 
 def _handle_portfolio(chat_id: str) -> None:
-    """Handle /portfolio command."""
+    """Handle /portfolio command — shows holdings with live P&L."""
     holdings = list_holdings()
     if not holdings:
         _reply(chat_id, "📂 Your portfolio is empty.\n\nAdd stocks with:\n`/buy TICKER PRICE`")
         return
 
     lines = ["📊 *Your Portfolio*\n"]
+    total_invested = 0.0
+    total_current = 0.0
+
     for h in holdings:
+        current_price = get_current_price(h.ticker)
+        if current_price is not None:
+            pnl_pct = ((current_price - h.buy_price) / h.buy_price) * 100
+            pnl_icon = "📈" if pnl_pct >= 0 else "📉"
+            price_line = f"   💵 Now: {current_price:.2f} EGP ({pnl_pct:+.1f}%)"
+            if h.shares > 0:
+                total_invested += h.buy_price * h.shares
+                total_current += current_price * h.shares
+        else:
+            pnl_icon = "❓"
+            price_line = "   💵 Now: _unavailable_"
+
         lines.append(
-            f"• *{h.ticker}*\n"
-            f"   💰 Bought at: {h.buy_price:.2f} EGP\n"
-            f"   📅 Date: {h.buy_date}"
+            f"{pnl_icon} *{h.ticker}*\n"
+            f"   🏷️ Bought: {h.buy_price:.2f} EGP\n"
+            f"{price_line}\n"
+            f"   📅 {h.buy_date}"
         )
         if h.shares > 0:
-            lines[-1] += f"\n   📦 Shares: {h.shares:.1f}"
+            lines[-1] += f" • {h.shares:.1f} shares"
 
     lines.append(f"\n_Total: {len(holdings)} stock(s)_")
+    if total_invested > 0:
+        total_pnl = ((total_current - total_invested) / total_invested) * 100
+        lines.append(f"_Invested: {total_invested:.0f} EGP → Now: {total_current:.0f} EGP ({total_pnl:+.1f}%)_")
+
+    lines.append("\n📌 _Prices are closing prices._")
     _reply(chat_id, "\n".join(lines))
 
 
@@ -128,18 +159,118 @@ def _handle_help(chat_id: str) -> None:
     _reply(
         chat_id,
         "🤖 *Thndr Bot Commands*\n\n"
-        "📥 `/buy TICKER PRICE` — Add stock to portfolio\n"
-        "   _Example:_ `/buy ETEL 84.80`\n"
-        "   _With shares:_ `/buy ETEL 84.80 10`\n\n"
-        "📤 `/sell TICKER` — Remove stock from portfolio\n"
-        "   _Example:_ `/sell ETEL`\n\n"
-        "📊 `/portfolio` — View your holdings\n\n"
-        "🔍 `/scan` — Trigger immediate market scan\n\n"
-        "❓ `/help` — Show this message\n\n"
-        "The bot scans EGX every 30 min and alerts you for:\n"
-        "📈 *BUY* — when a stock scores above 75/100\n"
-        "🔴 *SELL* — when your holdings hit sell signals",
+        "*Portfolio:*\n"
+        "📥 `/buy TICKER PRICE` — Add stock\n"
+        "   `/buy ETEL 84.80` or `/buy ETEL 84.80 10`\n"
+        "📤 `/sell TICKER` — Remove stock\n"
+        "📊 `/portfolio` — View holdings with live P&L\n\n"
+        "*Alerts:*\n"
+        "🔔 `/alert TICKER PRICE` — Price alert\n"
+        "   `/alert COMI 130` (above) or `/alert COMI 120 below`\n"
+        "📋 `/alerts` — View active alerts\n"
+        "❌ `/removealert TICKER` — Remove alerts\n\n"
+        "*Market:*\n"
+        "🔍 `/scan` — Trigger market scan\n"
+        "📈 `/status` — Bot status & EGX30 index\n"
+        "❓ `/help` — This message\n\n"
+        "_Scans EGX every 5 min during market hours_\n"
+        "_Sun-Thu 10AM-3PM Cairo time_",
     )
+
+
+def _handle_alert(chat_id: str, args: list[str]) -> None:
+    """Handle /alert TICKER PRICE [above|below] command."""
+    if len(args) < 2:
+        _reply(chat_id, "❌ Usage: `/alert TICKER PRICE`\nExample: `/alert COMI 130`\nOr: `/alert COMI 120 below`")
+        return
+
+    ticker = args[0].upper()
+    try:
+        price = float(args[1])
+    except ValueError:
+        _reply(chat_id, f"❌ Invalid price: `{args[1]}`")
+        return
+
+    direction = "above"
+    if len(args) >= 3 and args[2].lower() in ("below", "under", "down"):
+        direction = "below"
+
+    alert = add_alert(ticker, price, direction)
+    arrow = "⬆️" if direction == "above" else "⬇️"
+    _reply(
+        chat_id,
+        f"🔔 *Price alert set!*\n"
+        f"{arrow} {alert.ticker} — alert when price goes *{direction}* {alert.target_price:.2f} EGP",
+    )
+
+
+def _handle_alerts(chat_id: str) -> None:
+    """Handle /alerts — show active price alerts."""
+    alerts = load_alerts()
+    if not alerts:
+        _reply(chat_id, "🔕 No active price alerts.\n\nSet one with:\n`/alert TICKER PRICE`")
+        return
+
+    lines = ["🔔 *Active Price Alerts*\n"]
+    for a in alerts:
+        arrow = "⬆️" if a.direction == "above" else "⬇️"
+        lines.append(f"{arrow} *{a.ticker}* — {a.direction} {a.target_price:.2f} EGP")
+
+    lines.append(f"\n_Total: {len(alerts)} alert(s)_")
+    lines.append("Remove with: `/removealert TICKER`")
+    _reply(chat_id, "\n".join(lines))
+
+
+def _handle_remove_alert(chat_id: str, args: list[str]) -> None:
+    """Handle /removealert TICKER."""
+    if not args:
+        _reply(chat_id, "❌ Usage: `/removealert TICKER`")
+        return
+
+    ticker = args[0].upper()
+    count = remove_alerts(ticker)
+    if count > 0:
+        _reply(chat_id, f"✅ Removed {count} alert(s) for {ticker}")
+    else:
+        _reply(chat_id, f"❌ No alerts found for {ticker}")
+
+
+def _handle_status(chat_id: str) -> None:
+    """Handle /status — show bot status and EGX30."""
+    from bot import EGYPT_TZ, is_market_hours
+
+    cairo_now = datetime.now(EGYPT_TZ)
+    market_open = is_market_hours()
+    market_icon = "🟢" if market_open else "🔴"
+    market_str = "OPEN" if market_open else "CLOSED"
+
+    lines = [
+        "🤖 *Bot Status*\n",
+        f"⏰ Cairo time: {cairo_now.strftime('%H:%M %A')}",
+        f"{market_icon} Market: *{market_str}*",
+        f"⏱️ Scan interval: {Config.SCAN_INTERVAL_MINUTES} min",
+    ]
+
+    # EGX30 index
+    egx30 = fetch_egx30()
+    if egx30:
+        idx_icon = "📈" if egx30["change"] >= 0 else "📉"
+        lines.append(f"\n{idx_icon} *EGX30 Index*")
+        lines.append(f"   Value: {egx30['value']:,.0f}")
+        lines.append(f"   Change: {egx30['change']:+.0f} ({egx30['change_pct']:+.1f}%)")
+
+    # Portfolio summary
+    holdings = list_holdings()
+    alerts = load_alerts()
+    lines.append(f"\n📊 Portfolio: {len(holdings)} stock(s)")
+    lines.append(f"🔔 Alerts: {len(alerts)} active")
+
+    if market_open:
+        lines.append("\n_Next scan coming soon..._")
+    else:
+        lines.append("\n_Scans resume when market opens (Sun-Thu 10AM)_")
+
+    _reply(chat_id, "\n".join(lines))
 
 
 # Flag set by /scan command, checked by bot.py
@@ -202,6 +333,14 @@ def process_updates() -> None:
             _handle_sell(chat_id, args)
         elif command == "/portfolio":
             _handle_portfolio(chat_id)
+        elif command == "/alert":
+            _handle_alert(chat_id, args)
+        elif command == "/alerts":
+            _handle_alerts(chat_id)
+        elif command == "/removealert":
+            _handle_remove_alert(chat_id, args)
+        elif command == "/status":
+            _handle_status(chat_id)
         elif command == "/scan":
             _handle_scan(chat_id)
         elif command in ("/help", "/start"):

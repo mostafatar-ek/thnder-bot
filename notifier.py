@@ -174,3 +174,55 @@ def send_sell_alert(sell_results: list[SellResult]) -> bool:
 
     message = _build_sell_message(sell_results)
     return _send_telegram(message)
+
+
+def send_price_alert(alert, current_price: float) -> bool:
+    """Send a price alert notification."""
+    arrow = "⬆️" if alert.direction == "above" else "⬇️"
+    message = (
+        f"🔔 *Price Alert Triggered!*\n\n"
+        f"{arrow} *{alert.ticker}*\n"
+        f"   Target: {alert.direction} {alert.target_price:.2f} EGP\n"
+        f"   Current: *{current_price:.2f} EGP*\n\n"
+        f"_This alert has been removed automatically._"
+    )
+    return _send_telegram(message)
+
+
+def send_daily_summary(egx30: dict | None, portfolio_data: list) -> bool:
+    """Send end-of-day market recap."""
+    now = datetime.now().strftime("%Y-%m-%d")
+
+    lines = [
+        f"📅 *Daily Recap — {now}*\n",
+    ]
+
+    # EGX30 index
+    if egx30:
+        idx_icon = "📈" if egx30["change"] >= 0 else "📉"
+        lines.append(f"{idx_icon} *EGX30 Index*: {egx30['value']:,.0f}")
+        lines.append(f"   Change: {egx30['change']:+.0f} ({egx30['change_pct']:+.1f}%)\n")
+    else:
+        lines.append("📊 EGX30: _unavailable_\n")
+
+    # Portfolio summary
+    if portfolio_data:
+        lines.append("💼 *Your Portfolio:*")
+        total_invested = 0.0
+        total_current = 0.0
+
+        for holding, price, pnl_pct in portfolio_data:
+            pnl_icon = "📈" if pnl_pct >= 0 else "📉"
+            lines.append(f"{pnl_icon} {holding.ticker}: {price:.2f} EGP ({pnl_pct:+.1f}%)")
+            if holding.shares > 0:
+                total_invested += holding.buy_price * holding.shares
+                total_current += price * holding.shares
+
+        if total_invested > 0:
+            total_pnl = ((total_current - total_invested) / total_invested) * 100
+            lines.append(f"\n💰 Total: {total_invested:.0f} → {total_current:.0f} EGP ({total_pnl:+.1f}%)")
+    else:
+        lines.append("💼 _No holdings in portfolio._")
+
+    lines.append("\n_See you tomorrow! 👋_")
+    return _send_telegram("\n".join(lines))

@@ -20,9 +20,9 @@ import pytz
 
 from analyzer import DealResult, check_sell_signals, screen_all_stocks
 from config import Config
-from notifier import send_deal_alert, send_scan_summary, send_sell_alert
-from portfolio import add_holding, list_holdings, load_portfolio, remove_holding
-from stock_data import EGX_TICKERS, fetch_all_stocks, fetch_stock_data
+from notifier import send_deal_alert, send_scan_summary, send_sell_alert, send_daily_summary, send_price_alert
+from portfolio import add_holding, list_holdings, load_alerts, load_portfolio, remove_holding, remove_triggered_alert
+from stock_data import EGX_TICKERS, fetch_all_stocks, fetch_egx30, fetch_stock_data, get_current_price
 from telegram_commands import is_scan_requested, process_updates
 
 # ── Logging setup ──
@@ -102,7 +102,10 @@ def run_scan(forced: bool = False) -> list[DealResult]:
     else:
         logger.info("No deals scoring above threshold this scan.")
 
-    # 5. Check sell signals for portfolio holdings
+    # 5. Check price alerts
+    check_price_alerts()
+
+    # 6. Check sell signals for portfolio holdings
     holdings = load_portfolio()
     if holdings:
         logger.info(f"Checking sell signals for {len(holdings)} holding(s)...")
@@ -134,6 +137,48 @@ def run_scan(forced: bool = False) -> list[DealResult]:
     return deals
 
 
+def check_price_alerts() -> None:
+    """Check all price alerts and notify if triggered."""
+    alerts = load_alerts()
+    if not alerts:
+        return
+
+    triggered = []
+    for alert in alerts:
+        price = get_current_price(alert.ticker)
+        if price is None:
+            continue
+
+        if alert.direction == "above" and price >= alert.target_price:
+            triggered.append((alert, price))
+        elif alert.direction == "below" and price <= alert.target_price:
+            triggered.append((alert, price))
+
+    for alert, price in triggered:
+        send_price_alert(alert, price)
+        remove_triggered_alert(alert)
+        logger.info(f"🔔 Price alert triggered: {alert.ticker} {alert.direction} {alert.target_price} (now {price})")
+
+
+def send_daily_recap() -> None:
+    """Send end-of-day summary at market close."""
+    logger.info("Sending daily summary...")
+
+    # Fetch EGX30
+    egx30 = fetch_egx30()
+
+    # Portfolio P&L
+    holdings = load_portfolio()
+    portfolio_data = []
+    for h in holdings:
+        price = get_current_price(h.ticker)
+        if price is not None:
+            pnl_pct = ((price - h.buy_price) / h.buy_price) * 100
+            portfolio_data.append((h, price, pnl_pct))
+
+    send_daily_summary(egx30, portfolio_data)
+
+
 def run_loop():
     """Run scans on a schedule, checking Telegram commands between scans."""
     interval = Config.SCAN_INTERVAL_MINUTES * 60
@@ -144,6 +189,7 @@ def run_loop():
 
     next_scan_time = 0  # Run first scan immediately
     was_sleeping = False
+    daily_summary_sent = False
 
     while True:
         try:
@@ -152,12 +198,24 @@ def run_loop():
 
             now = time.time()
             scan_requested = is_scan_requested()
+            cairo_now = datetime.now(EGYPT_TZ)
+
+            # Reset daily summary flag at midnight
+            if cairo_now.hour == 0 and daily_summary_sent:
+                daily_summary_sent = False
 
             # Check market hours
             if not is_market_hours() and not scan_requested:
+                # Send daily summary at 3 PM (just after market close)
+                if (cairo_now.hour == 15 and cairo_now.minute < 10
+                        and not daily_summary_sent
+                        and cairo_now.weekday() in EGX_TRADING_DAYS):
+                    send_daily_recap()
+                    daily_summary_sent = True
+
                 if not was_sleeping:
-                    cairo_now = datetime.now(EGYPT_TZ).strftime("%H:%M %A")
-                    logger.info(f"💤 Market closed ({cairo_now} Cairo). Sleeping until next session...")
+                    cairo_str = cairo_now.strftime("%H:%M %A")
+                    logger.info(f"💤 Market closed ({cairo_str} Cairo). Sleeping until next session...")
                     was_sleeping = True
                 time.sleep(10)  # Check Telegram every 10s while sleeping
                 continue

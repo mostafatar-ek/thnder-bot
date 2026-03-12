@@ -104,3 +104,32 @@ def get_stock_info(ticker: str) -> dict:
     except Exception as e:
         logger.error(f"Error getting info for {ticker}: {e}")
         return {}
+
+
+def fetch_egx30() -> dict | None:
+    """Fetch EGX30 index data. Returns {value, change, change_pct} or None."""
+    try:
+        ticker = yf.Ticker("^EGX30")
+        df = ticker.history(period="5d")
+        if df.empty or len(df) < 2:
+            return None
+        current = df["Close"].iloc[-1]
+        prev = df["Close"].iloc[-2]
+        change = current - prev
+        change_pct = (change / prev) * 100
+        return {
+            "value": round(current, 2),
+            "change": round(change, 2),
+            "change_pct": round(change_pct, 2),
+        }
+    except Exception as e:
+        logger.error(f"Error fetching EGX30: {e}")
+        return None
+
+
+def get_current_price(ticker: str) -> float | None:
+    """Get the latest closing price for a single ticker."""
+    df = fetch_stock_data(ticker, period="5d")
+    if df is not None and not df.empty:
+        return round(df["Close"].iloc[-1], 2)
+    return None

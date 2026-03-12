@@ -1,6 +1,7 @@
 """
 Portfolio tracker — tracks stocks you bought so the bot knows when to alert SELL.
-Stores holdings in a JSON file.
+Also handles price alerts.
+Stores data in JSON files.
 """
 
 import json
@@ -12,6 +13,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 PORTFOLIO_FILE = os.path.join(os.path.dirname(__file__), "portfolio.json")
+ALERTS_FILE = os.path.join(os.path.dirname(__file__), "price_alerts.json")
 
 
 @dataclass
@@ -81,3 +83,77 @@ def remove_holding(ticker: str) -> bool:
 def list_holdings() -> list[Holding]:
     """List all current holdings."""
     return load_portfolio()
+
+
+# ── Price Alerts ──
+
+@dataclass
+class PriceAlert:
+    ticker: str
+    target_price: float
+    direction: str  # "above" or "below"
+    created_date: str = ""
+
+
+def load_alerts() -> list[PriceAlert]:
+    """Load price alerts from disk."""
+    if not os.path.exists(ALERTS_FILE):
+        return []
+    try:
+        with open(ALERTS_FILE, "r") as f:
+            data = json.load(f)
+        return [PriceAlert(**a) for a in data]
+    except Exception as e:
+        logger.error(f"Failed to load alerts: {e}")
+        return []
+
+
+def save_alerts(alerts: list[PriceAlert]) -> None:
+    """Save price alerts to disk."""
+    try:
+        with open(ALERTS_FILE, "w") as f:
+            json.dump([asdict(a) for a in alerts], f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save alerts: {e}")
+
+
+def add_alert(ticker: str, target_price: float, direction: str = "above") -> PriceAlert:
+    """Add a price alert."""
+    ticker = ticker.upper()
+    if not ticker.endswith(".CA"):
+        ticker += ".CA"
+    alerts = load_alerts()
+    alert = PriceAlert(
+        ticker=ticker,
+        target_price=target_price,
+        direction=direction,
+        created_date=datetime.now().strftime("%Y-%m-%d"),
+    )
+    alerts.append(alert)
+    save_alerts(alerts)
+    logger.info(f"Alert set: {ticker} {direction} {target_price} EGP")
+    return alert
+
+
+def remove_alerts(ticker: str) -> int:
+    """Remove all alerts for a ticker. Returns count removed."""
+    ticker = ticker.upper()
+    if not ticker.endswith(".CA"):
+        ticker += ".CA"
+    alerts = load_alerts()
+    new_alerts = [a for a in alerts if a.ticker != ticker]
+    removed = len(alerts) - len(new_alerts)
+    if removed > 0:
+        save_alerts(new_alerts)
+    return removed
+
+
+def remove_triggered_alert(alert: PriceAlert) -> None:
+    """Remove a specific triggered alert."""
+    alerts = load_alerts()
+    new_alerts = [a for a in alerts if not (
+        a.ticker == alert.ticker and
+        a.target_price == alert.target_price and
+        a.direction == alert.direction
+    )]
+    save_alerts(new_alerts)
