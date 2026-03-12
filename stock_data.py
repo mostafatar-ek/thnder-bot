@@ -14,26 +14,51 @@ logger = logging.getLogger(__name__)
 # Popular EGX stocks — add/remove tickers as needed
 # Format: TICKER.CA for Egyptian Exchange on Yahoo Finance
 EGX_TICKERS = [
+    # ── Banks & Financial ──
     "COMI.CA",   # Commercial International Bank (CIB)
-    "HRHO.CA",   # Hermes Holding
+    "ADIB.CA",   # Abu Dhabi Islamic Bank Egypt
+    "CCAP.CA",   # Citadel Capital (Qalaa Holdings)
+    "BINV.CA",   # Beltone Financial
+    # ── Real Estate ──
     "TMGH.CA",   # Talaat Moustafa Group
+    "PHDC.CA",   # Palm Hills Development
+    "HELI.CA",   # Heliopolis Housing
+    "OCDI.CA",   # Orascom Development
+    # ── Industrial & Energy ──
     "SWDY.CA",   # Elsewedy Electric
+    "ABUK.CA",   # Abu Qir Fertilizers
+    "AMOC.CA",   # Alexandria Mineral Oils
+    "SKPC.CA",   # Sidi Kerir Petrochemicals
+    "IRON.CA",   # Egyptian Iron & Steel
+    "ACGC.CA",   # Arabian Cement
+    "SUGR.CA",   # Delta Sugar
+    "MPRC.CA",   # Middle & East for Paper
+    # ── Telecom & Tech ──
+    "ETEL.CA",   # Telecom Egypt
+    "FWRY.CA",   # Fawry for Banking Technology
+    "RAYA.CA",   # Raya Holding
+    "MTIE.CA",   # Mobinil Telecom (EITC)
+    # ── Consumer & Food ──
     "EAST.CA",   # Eastern Company
+    "JUFO.CA",   # Juhayna Food Industries
+    "POUL.CA",   # Cairo Poultry
+    "ISPH.CA",   # Ibnsina Pharma
+    "MFPC.CA",   # Misr Fertilizers (MOPCO)
+    "GBCO.CA",   # GB Auto
+    # ── Other ──
+    "HRHO.CA",   # Hermes Holding
     "EFIH.CA",   # EFG Hermes
     "ORWE.CA",   # Oriental Weavers
-    "ABUK.CA",   # Abu Qir Fertilizers
-    "ESRS.CA",   # Ezz Steel
-    "MNHD.CA",   # Madinet Nasr Housing
-    "PHDC.CA",   # Palm Hills Development
     "EKHO.CA",   # El Khair for Industry
-    "AMOC.CA",   # Alexandria Mineral Oils
-    "DCRC.CA",   # Delta Construction
-    "JUFO.CA",   # Juhayna Food Industries
-    "SKPC.CA",   # Sidi Kerir Petrochemicals
-    "ETEL.CA",   # Telecom Egypt
     "CLHO.CA",   # Cleopatra Hospital
-    "FWRY.CA",   # Fawry for Banking Technology
-    "HELI.CA",   # Heliopolis Housing
+    "ORAS.CA",   # Orascom Construction
+    "ALCN.CA",   # Alexandria Containers
+    "EGAL.CA",   # EgyptAir
+    "EXPA.CA",   # Export Development Bank
+    "EGTS.CA",   # Egyptian Transport (EGYTRANS)
+    "ETRS.CA",   # Egyptian for Tourism Resorts
+    "ELKA.CA",   # El Kahera for Housing
+    "SPMD.CA",   # Speed Medical
 ]
 
 
