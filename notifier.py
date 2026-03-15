@@ -91,37 +91,44 @@ def _build_sell_message(sell_results: list[SellResult]) -> str:
 
 
 def _send_telegram(message: str) -> bool:
-    """Send a message via Telegram Bot API."""
+    """Send a message via Telegram Bot API to all authorized chat IDs."""
     bot_token = Config.TELEGRAM_BOT_TOKEN
-    chat_id = Config.TELEGRAM_CHAT_ID
+    chat_ids = Config.TELEGRAM_ALLOWED_CHAT_IDS
 
-    if not bot_token or not chat_id:
+    if not bot_token or not chat_ids:
         logger.error(
             f"Telegram not configured! token={'SET' if bot_token else 'EMPTY'}, "
-            f"chat_id={'SET' if chat_id else 'EMPTY'}"
+            f"chat_ids={'SET' if chat_ids else 'EMPTY'}"
         )
         return False
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
 
     try:
-        logger.info(f"Sending Telegram message to chat {chat_id}...")
-        resp = requests.post(
-            url,
-            json={
-                "chat_id": chat_id,
-                "text": message,
-                "parse_mode": "Markdown",
-            },
-            timeout=15,
-        )
+        sent_count = 0
+        for chat_id in chat_ids:
+            logger.info(f"Sending Telegram message to chat {chat_id}...")
+            resp = requests.post(
+                url,
+                json={
+                    "chat_id": chat_id,
+                    "text": message,
+                    "parse_mode": "Markdown",
+                },
+                timeout=15,
+            )
 
-        if resp.status_code == 200:
-            logger.info("Telegram message sent successfully!")
+            if resp.status_code == 200:
+                sent_count += 1
+            else:
+                logger.error(f"Telegram API error for chat {chat_id} ({resp.status_code}): {resp.text}")
+
+        if sent_count == len(chat_ids):
+            logger.info(f"Telegram message sent successfully to {sent_count} chat(s).")
             return True
-        else:
-            logger.error(f"Telegram API error {resp.status_code}: {resp.text}")
-            return False
+
+        logger.warning(f"Telegram message sent to {sent_count}/{len(chat_ids)} chat(s).")
+        return sent_count > 0
     except Exception as e:
         logger.error(f"Failed to send Telegram message: {e}", exc_info=True)
         return False

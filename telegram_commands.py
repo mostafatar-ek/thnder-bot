@@ -297,8 +297,8 @@ def process_updates() -> None:
     """Check for new Telegram messages and handle commands."""
     global _last_update_id
 
-    allowed_chat_id = Config.TELEGRAM_CHAT_ID
-    if not allowed_chat_id:
+    allowed_chat_ids = set(Config.TELEGRAM_ALLOWED_CHAT_IDS)
+    if not allowed_chat_ids:
         return
 
     updates = _get_updates(offset=_last_update_id + 1, timeout=0)
@@ -313,8 +313,8 @@ def process_updates() -> None:
         chat_id = str(message["chat"]["id"])
         text = message.get("text", "").strip()
 
-        # Only respond to the authorized user
-        if chat_id != allowed_chat_id:
+        # Only respond to authorized users
+        if chat_id not in allowed_chat_ids:
             logger.warning(f"Ignoring message from unauthorized chat: {chat_id}")
             continue
 

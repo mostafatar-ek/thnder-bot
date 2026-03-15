@@ -257,7 +257,7 @@ def send_test_notification():
     if success:
         logger.info("Test notification sent! Check Telegram.")
     else:
-        logger.error("Test notification failed. Check your TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.")
+            logger.error("Test notification failed. Check your TELEGRAM_BOT_TOKEN and TELEGRAM_ALLOWED_CHAT_IDS/TELEGRAM_CHAT_ID.")
 
 
 def main():

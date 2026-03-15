@@ -18,6 +18,14 @@ class Config:
     def TELEGRAM_CHAT_ID(self):
         return _env("TELEGRAM_CHAT_ID")
 
+    @property
+    def TELEGRAM_ALLOWED_CHAT_IDS(self):
+        raw = _env("TELEGRAM_ALLOWED_CHAT_IDS")
+        if raw:
+            return [chat_id.strip() for chat_id in raw.split(",") if chat_id.strip()]
+        chat_id = self.TELEGRAM_CHAT_ID
+        return [chat_id] if chat_id else []
+
     # Bot
     @property
     def SCAN_INTERVAL_MINUTES(self):
